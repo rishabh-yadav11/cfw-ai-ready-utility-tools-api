@@ -1,60 +1,73 @@
 # AI-Ready Utility Tools API
 
-A Cloudflare Worker providing AI-friendly APIs for metadata extraction, text cleaning, schema processing, date normalization, and HTML table extraction.
+## Product Summary
+Expose small agent-friendly tools for webpage text, schema extraction, URL metadata, date normalization, and table extraction from HTML.
 
-## Features
+## Route List
+- GET /v1/tools/url-metadata?url=
+- GET /v1/tools/clean-text?url=
+- GET /v1/tools/schema?url=
+- POST /v1/tools/normalize-date
+- POST /v1/tools/extract-html-table
+- scopes: tools:read, tools:write
+- ssrf_guard: strict on URL routes
+- body_caps: 256KB
+- output_rules: stable JSON schema, no raw stack traces
+- clean_text_case: URL returns main text and source meta
+- date_case: mixed date input returns ISO-8601
+- bad_html_case: table extract returns 422 with field error list
 
-- **Metadata Extraction**: Fetch titles, descriptions, canonical URLs, language, favicon, robots metadata, and Open Graph tags.
-- **Tools**:
-  - Extract URL metadata
-  - Clean web page text (for LLM ingestion)
-  - Extract structured JSON-LD schema
-  - Normalize dates into ISO-8601
-  - Extract HTML tables into structured JSON arrays
-- **Security**: Strict SSRF protections, API key authentication, per-IP rate limiting.
-- **Deployment**: Powered by Cloudflare Workers and KV for fast, edge-hosted responses.
+## Auth Model
+- **Type**: API Key (Bearer Token)
+- **Header**: `Authorization: Bearer <api_key>`
+- **Storage**: Hashed storage in Cloudflare KV
+- **Advanced**: HMAC Signature required for write routes (X-Timestamp, X-Nonce, X-Signature)
 
-## Setup
+## Rate Limit Model
+- **Model**: Token Bucket (per API Key and per IP)
+- **Free Plan**: 60 req/min, 5000/day
+- **Pro Plan**: 300 req/min, 100,000/day
+- **Headers**: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
 
-1. `npm install`
-2. Configure your KV namespace in `wrangler.jsonc` and replace `placeholder`.
-3. Put `ADMIN_API_KEY` in your `.dev.vars` file for local development.
+## Required Cloudflare Bindings
+- **KV**: Used for API key metadata, rate limiting, and asset storage.
 
-```sh
-echo "ADMIN_API_KEY=my-super-secret-admin-key" > .dev.vars
-```
-
-## Running Locally
-
-```sh
+## Local Setup
+```bash
+npm install
+cp .env.example .env
 npm run dev
 ```
 
-## Creating an API Key
-
-```sh
-curl -X POST http://localhost:8787/v1/keys \
-  -H "Authorization: Bearer my-super-secret-admin-key" \
-  -H "Content-Type: application/json" \
-  -d '{"plan": "free", "scopes": ["tools:read"]}'
+## Test Commands
+```bash
+npm test        # Run Vitest
+npm run lint    # Run ESLint
+npm run typecheck # Run TSC
 ```
 
-Response includes your new `key`.
-
-## Testing the API
-
-```sh
-curl -X GET "http://localhost:8787/v1/metadata?url=https://example.com" \
-  -H "Authorization: Bearer YOUR_GENERated_KEY"
-```
-
-## Deployment
-
-```sh
+## Deploy Steps
+```bash
+# 1. Create KV/R2 namespaces in Cloudflare
+# 2. Update wrangler.jsonc with namespace IDs
+# 3. Add secrets
+wrangler secret put API_KEY_SECRET
+# 4. Deploy
 npm run deploy
 ```
 
-Make sure to map your production KV bindings and Secrets:
-```sh
-wrangler secret put ADMIN_API_KEY
+## Security Notes
+- **SSRF Guard**: Strict blocking of private/local IP ranges on all URL-fetching routes.
+- **Request IDs**: `X-Request-Id` included in every response for tracing.
+- **Strict Validation**: Zod-based input validation for all queries and bodies.
+- **Redaction**: Automatic redaction of PII and secrets in logs.
+
+## Example Request
+```bash
+curl -X GET "http://localhost:8787/v1/tools/url-metadata?url=" \
+     -H "Authorization: Bearer YOUR_API_KEY"
 ```
+
+## Response Shape
+- **Success**: `{ ok: true, data: {...}, meta: {...}, request_id: "..." }`
+- **Error**: `{ ok: false, error: { code: "...", message: "..." }, request_id: "..." }`
